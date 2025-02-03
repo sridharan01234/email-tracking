@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
-import { 
-  PinpointClient, 
-  UpdateEndpointCommand,
-  CreateCampaignCommand 
-} from "@aws-sdk/client-pinpoint";
+import nodemailer from 'nodemailer';
+import { PinpointClient, UpdateEndpointCommand } from "@aws-sdk/client-pinpoint";
 import crypto from 'crypto';
 
 function generateMessageId() {
   return crypto.randomBytes(16).toString('hex');
+}
+
+function getBaseUrl() {
+  return process.env.NODE_ENV === 'production' 
+    ? process.env.API_URL 
+    : 'http://localhost:3000';
 }
 
 export async function POST(req: Request) {
@@ -16,6 +19,16 @@ export async function POST(req: Request) {
     const { name, email, subject, message } = formData;
     const messageId = generateMessageId();
     const endpointId = crypto.createHash('md5').update(email).digest('hex');
+    const baseUrl = getBaseUrl();
+
+    // Create tracking pixel and click tracking URLs
+    const trackingPixel = `<img src="${baseUrl}/api/track/open/${messageId}/${endpointId}" width="1" height="1" style="display:none;" />`;
+    
+    // Convert links in message to trackable links
+    const processedMessage = message.replace(
+      /(https?:\/\/[^\s]+)/g, 
+      (url: string) => `<a href="${baseUrl}/api/track/click/${messageId}/${endpointId}?url=${encodeURIComponent(url)}">${url}</a>`
+    );
 
     const pinpoint = new PinpointClient({ 
       region: process.env.AWS_REGION,
@@ -25,17 +38,22 @@ export async function POST(req: Request) {
       }
     });
 
-    // Update the endpoint
+    // Update Pinpoint endpoint
     await pinpoint.send(new UpdateEndpointCommand({
-      ApplicationId: process.env.PINPOINT_PROJECT_ID!,
+      ApplicationId: process.env.PINPOINT_PROJECT_ID!, // Make sure this is set
       EndpointId: endpointId,
       EndpointRequest: {
-        ChannelType: 'CUSTOM',
+        ChannelType: 'EMAIL',
         Address: email,
         Attributes: {
           name: [name],
           lastEmailDate: [new Date().toISOString()],
           messageIds: [messageId]
+        },
+        Metrics: {
+          emailsSent: 1,
+          opens: 0,
+          clicks: 0
         },
         User: {
           UserId: email
@@ -43,34 +61,35 @@ export async function POST(req: Request) {
       }
     }));
 
-    // Create a campaign with custom URL
-    await pinpoint.send(new CreateCampaignCommand({
-      ApplicationId: process.env.PINPOINT_PROJECT_ID!,
-      WriteCampaignRequest: {
-        Name: `Email_${messageId}`,
-        CustomDeliveryConfiguration: {
-          DeliveryUri: process.env.CUSTOM_ENDPOINT_URL,
-          EndpointTypes: ['CUSTOM']
-        },
-        MessageConfiguration: {
-          CustomMessage: {
-            Data: JSON.stringify({
-              messageId,
-              endpointId,
-              email,
-              name,
-              subject,
-              message,
-              timestamp: new Date().toISOString()
-            })
-          }
-        },
-        Schedule: {
-          IsLocalTime: false,
-          StartTime: new Date().toISOString()
-        }
+    // Send email with tracking
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: subject,
+      html: `
+        <html>
+          <body>
+            <h2>Hello ${name},</h2>
+            <div>${processedMessage}</div>
+            ${trackingPixel}
+          </body>
+        </html>
+      `,
+      headers: {
+        'X-Message-ID': messageId,
+        'X-Endpoint-ID': endpointId
       }
-    }));
+    };
+
+    await transporter.sendMail(mailOptions);
 
     return NextResponse.json({ 
       success: true,
