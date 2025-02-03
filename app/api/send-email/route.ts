@@ -50,11 +50,6 @@ export async function POST(req: Request) {
           lastEmailDate: [new Date().toISOString()],
           messageIds: [messageId]
         },
-        Metrics: {
-          emailsSent: 1,
-          opens: 0,
-          clicks: 0
-        },
         User: {
           UserId: email
         }
