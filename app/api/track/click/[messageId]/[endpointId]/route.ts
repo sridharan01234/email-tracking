@@ -4,10 +4,10 @@ import { NextRequest } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  context: { params: Record<string, string> }
+  { params }: { params: Promise<{ messageId: string; endpointId: string }> }
 ) {
   try {
-    const { messageId, endpointId } = context.params;
+    const { messageId, endpointId } = await params;
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
 
