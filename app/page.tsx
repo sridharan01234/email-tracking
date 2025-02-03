@@ -1,18 +1,21 @@
+// app/page.tsx
 'use client';
 import { useState } from 'react';
 
-export default function Home() {
+export default function ContactForm() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     subject: '',
     message: ''
   });
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus('Sending...');
+    setStatus('loading');
+    setError(null);
 
     try {
       const response = await fetch('/api/send-email', {
@@ -23,88 +26,95 @@ export default function Home() {
         body: JSON.stringify(formData),
       });
 
-      if (response.ok) {
-        setStatus('Email sent successfully!');
-        setFormData({ name: '', email: '', subject: '', message: '' });
-      } else {
-        setStatus('Failed to send email.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send email');
       }
-    } catch (error) {
-      setStatus('Error sending email.');
+
+      setStatus('success');
+      setFormData({
+        name: '',
+        email: '',
+        subject: '',
+        message: ''
+      });
+    } catch (err) {
+      setStatus('error');
+      setError(err instanceof Error ? err.message : 'An error occurred');
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
   return (
-    <div className="min-h-screen p-8">
-      <main className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Contact Form</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="name" className="block mb-1">Name</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div>
-            <label htmlFor="email" className="block mb-1">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div>
-            <label htmlFor="subject" className="block mb-1">Subject</label>
-            <input
-              type="text"
-              id="subject"
-              name="subject"
-              value={formData.subject}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div>
-            <label htmlFor="message" className="block mb-1">Message</label>
-            <textarea
-              id="message"
-              name="message"
-              value={formData.message}
-              onChange={handleChange}
-              required
-              rows={4}
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
-          >
-            Send Message
-          </button>
-        </form>
-        {status && (
-          <p className="mt-4 text-center">{status}</p>
-        )}
-      </main>
-    </div>
+    <form onSubmit={handleSubmit} className="max-w-md mx-auto mt-8 p-4">
+      {/* Form fields */}
+      <div className="mb-4">
+        <label htmlFor="name" className="block text-gray-700 mb-2">Name</label>
+        <input
+          type="text"
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+          className="w-full p-2 border rounded"
+          required
+        />
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="email" className="block text-gray-700 mb-2">Email</label>
+        <input
+          type="email"
+          id="email"
+          value={formData.email}
+          onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+          className="w-full p-2 border rounded"
+          required
+        />
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="subject" className="block text-gray-700 mb-2">Subject</label>
+        <input
+          type="text"
+          id="subject"
+          value={formData.subject}
+          onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+          className="w-full p-2 border rounded"
+          required
+        />
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="message" className="block text-gray-700 mb-2">Message</label>
+        <textarea
+          id="message"
+          value={formData.message}
+          onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
+          className="w-full p-2 border rounded"
+          rows={4}
+          required
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={status === 'loading'}
+        className={`w-full p-2 text-white rounded ${
+          status === 'loading' 
+            ? 'bg-gray-400' 
+            : 'bg-blue-500 hover:bg-blue-600'
+        }`}
+      >
+        {status === 'loading' ? 'Sending...' : 'Send Message'}
+      </button>
+
+      {status === 'success' && (
+        <p className="mt-4 text-green-600">Message sent successfully!</p>
+      )}
+
+      {status === 'error' && (
+        <p className="mt-4 text-red-600">Error: {error}</p>
+      )}
+    </form>
   );
 }

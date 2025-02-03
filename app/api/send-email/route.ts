@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { PinpointClient, UpdateEndpointCommand, GetEndpointCommand } from "@aws-sdk/client-pinpoint";
+import { PinpointClient, UpdateEndpointCommand } from "@aws-sdk/client-pinpoint";
 import crypto from 'crypto';
 
 function generateMessageId() {
@@ -15,7 +15,8 @@ function getBaseUrl() {
 
 export async function POST(req: Request) {
   try {
-    const { name, email, subject, message } = await req.json();
+    const formData = await req.json();
+    const { name, email, subject, message } = formData;
     const messageId = generateMessageId();
     const endpointId = crypto.createHash('md5').update(email).digest('hex');
     const baseUrl = getBaseUrl();
@@ -29,7 +30,6 @@ export async function POST(req: Request) {
       (url: string) => `<a href="${baseUrl}/api/track/click/${messageId}/${endpointId}?url=${encodeURIComponent(url)}">${url}</a>`
     );
 
-    // First, get current endpoint data if it exists
     const pinpoint = new PinpointClient({ 
       region: process.env.AWS_REGION,
       credentials: {
@@ -38,24 +38,9 @@ export async function POST(req: Request) {
       }
     });
 
-    let currentMetrics = { emailsSent: 0, opens: 0, clicks: 0 };
-    try {
-      const currentEndpoint = await pinpoint.send(new GetEndpointCommand({
-        ApplicationId: process.env.PINPOINT_PROJECT_ID,
-        EndpointId: endpointId
-      }));
-      currentMetrics = {
-        emailsSent: currentEndpoint.EndpointResponse?.Metrics?.emailsSent || 0,
-        opens: currentEndpoint.EndpointResponse?.Metrics?.opens || 0,
-        clicks: currentEndpoint.EndpointResponse?.Metrics?.clicks || 0
-      };
-    } catch (error) {
-      console.log('No existing endpoint found, creating new one');
-    }
-
     // Update Pinpoint endpoint
     await pinpoint.send(new UpdateEndpointCommand({
-      ApplicationId: process.env.PINPOINT_PROJECT_ID,
+      ApplicationId: process.env.PINPOINT_PROJECT_ID!, // Make sure this is set
       EndpointId: endpointId,
       EndpointRequest: {
         ChannelType: 'EMAIL',
@@ -66,9 +51,9 @@ export async function POST(req: Request) {
           messageIds: [messageId]
         },
         Metrics: {
-          emailsSent: (currentMetrics.emailsSent || 0) + 1,
-          opens: currentMetrics.opens || 0,
-          clicks: currentMetrics.clicks || 0
+          emailsSent: 1,
+          opens: 0,
+          clicks: 0
         },
         User: {
           UserId: email
@@ -115,7 +100,8 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json({ 
-      error: 'Failed to send email' 
+      error: 'Failed to send email',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 }
