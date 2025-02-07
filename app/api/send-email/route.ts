@@ -1,22 +1,15 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import crypto from 'crypto';
-
-function generateMessageId() {
-  return crypto.randomBytes(16).toString('hex');
-}
 
 export async function POST(req: Request) {
   try {
     const formData = await req.json();
     const { name, email, subject, message } = formData;
-    const messageId = generateMessageId();
 
-    // Create SES SMTP transporter
     const transporter = nodemailer.createTransport({
-      host: process.env.AWS_SES_SMTP_HOST, // e.g., 'email-smtp.us-west-2.amazonaws.com'
-      port: 587, // TLS port
-      secure: false, // true for 465, false for other ports
+      host: process.env.AWS_SES_SMTP_HOST,
+      port: 587,
+      secure: false,
       auth: {
         user: process.env.AWS_SES_SMTP_USERNAME,
         pass: process.env.AWS_SES_SMTP_PASSWORD
@@ -24,7 +17,7 @@ export async function POST(req: Request) {
     });
 
     const mailOptions = {
-      from: process.env.SENDER_EMAIL, // Verified sender email in SES
+      from: process.env.SENDER_EMAIL,
       to: email,
       subject: subject,
       html: `
@@ -35,16 +28,13 @@ export async function POST(req: Request) {
           </body>
         </html>
       `,
-      headers: {
-        'X-Message-ID': messageId
-      }
     };
 
-    await transporter.sendMail(mailOptions);
+    const result = await transporter.sendMail(mailOptions);
 
     return NextResponse.json({ 
       success: true,
-      messageId
+      messageId: result.messageId
     });
 
   } catch (error) {

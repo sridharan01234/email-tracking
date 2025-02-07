@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-pinpoint": "^3.738.0",
+    "@aws-sdk/client-sesv2": "^3.741.0",
     "chart.js": "^4.4.7",
     "next": "15.1.6",
     "nodemailer": "^6.10.0",
